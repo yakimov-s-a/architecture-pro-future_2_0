@@ -1,0 +1,40 @@
+@startuml
+title Bounded Contexts
+
+skinparam rectangle {
+    BackgroundColor<<core>> #lightyellow
+    BackgroundColor<<supporting>> #lightgreen
+    BackgroundColor<<generic>> #lightblue
+}
+
+rectangle "Patient Care\n(Клиники)" <<core>> as PatientCare
+rectangle "AI Services\n(ИИ-сервисы)" <<core>> as AIServices
+rectangle "Lending & Payments\n(Финтех)" <<core>> as Fintech
+rectangle "HR\n(HQ)" <<supporting>> as HR
+rectangle "Inventory & Assets\n(HQ)" <<supporting>> as Inventory
+rectangle "Financial Reporting\n(HQ)" <<supporting>> as FinReporting
+rectangle "Partner Integration\n(Фармацевтика, электроника)" <<supporting>> as Partners
+rectangle "Data & Portal\n(Каталог, витрины, портал)" <<generic>> as DataPlatform
+rectangle "Identity & Access\n(RBAC, аутентификация)" <<generic>> as IAM
+
+PatientCare --> AIServices : Customer / Supplier\n(направление на исследование,\nрезультат исследования)
+AIServices --> PatientCare : Published Language\n(завершенные исследования)
+
+PatientCare --> Fintech : Customer / Supplier\n(выставление счета за лечение)
+Fintech --> Partners : Customer / Supplier\n(оплата поставок)
+
+Fintech ..> FinReporting : Conformist\n(финансовые события для отчетности)
+HR ..> FinReporting : Conformist\n(данные по ФОТ)
+Inventory ..> FinReporting : Conformist\n(данные по остаткам / закупкам)
+
+PatientCare ..> DataPlatform : Published Language\n(только не медицинские\nагрегаты и статусы)
+Fintech ..> DataPlatform : Published Language\n(финансовые события)
+AIServices ..> DataPlatform : Published Language\n(метаданные моделей,\nне сырые снимки)
+HR ..> DataPlatform : Published Language
+Inventory ..> DataPlatform : Published Language
+Partners ..> DataPlatform : Published Language
+
+IAM --> PatientCare : Shared Kernel\n(аутентификация / роли)
+IAM --> Fintech : Shared Kernel
+IAM --> DataPlatform : Shared Kernel
+@enduml

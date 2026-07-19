@@ -1,0 +1,76 @@
+@startuml
+!include <C4/C4_Component>
+
+title Диаграмма компонентов C4 — Целевая архитектура
+
+Person(user, "Бизнес-пользователь", "Домен: клиники, финтех")
+Person(partner, "Партнеры", "Фармацевтика, производство электроники")
+
+System_Boundary(platform, "Data и Event Platform (облако)") {
+    Container_Boundary(portal, "Портал самообслуживания") {
+        Component(auth, "Модуль авторизации и RBAC", "Auth Service", "Доступ по домену / роли")
+        Component(query, "Конструктор отчетов", "Query Builder", "Построение произвольных отчетов")
+        Component(semantic, "Семантический слой", "Semantic Layer", "Единые бизнес-метрики")
+        Component(cache, "Слой кэширования", "Cache Layer", "Кэш агрегатов")
+    }
+    Container(catalog, "Каталог схем и данных", "Schema Registry и Data Catalog", "Контракты данных, версионирование")
+    Container(bus, "Событийная шина", "Kafka / Event Backbone", "Асинхронный обмен событиями между доменами")
+    Container_Boundary(marts, "Потоковые витрины") {
+        Component(ingest, "Stream Ingestion", "Kafka Connect / Consumers", "Прием событий из шины")
+        Component(transform, "Потоковые трансформации", "Flink jobs", "Трансформация по доменам")
+        Component(dlq, "Dead Letter Queue", "DLQ", "Обработка ошибочных событий")
+        ComponentDb(store, "Доменные хранилища", "Cloud DWH", "Аналитические данные по доменам")
+    }
+    Container_Boundary(acl, "Антикоррупционный слой (ACL)") {
+        Component(adapter_dwh, "Адаптер DWH", "DWH Adapter", "Чтение без доп. бизнес-логики")
+        Component(adapter_esb, "Адаптер Camel ESB", "ESB Adapter", "Обертка легаси-интеграций")
+        Component(mapper, "Маппер моделей данных", "Schema Mapper", "Конвертация из легаси схемы в доменную схему")
+    }
+}
+
+System_Boundary(domains, "Домены (владеют своими данными)") {
+    Container(fintech, "Домен Финтех", "Платежи, кредиты, счета")
+    Container(clinic, "Домен Клиники", "Пациентский поток", "EHR / медкарты — не выгружаются в аналитику")
+    Container(ai, "Домен AI-сервисы", "Python", "Диагностика, ML-модели")
+    Container(new_domains, "Новые домены", "Фармацевтика, электроника, новые регионы")
+    Container(hq, "Домен HQ", "Финотчетность, персонал, инвентаризация")
+}
+
+System_Boundary(legacy, "Легаси") {
+    ContainerDb(dwh, "DWH", "MS SQL Server 2008", "Только мед. данные и переходные интеграции")
+    Container(esb, "ESB", "Apache Camel", "Точечные синхронные интеграции")
+    Container(pb, "Клиентский интерфейс", "PowerBuilder")
+}
+
+Rel(auth, query, "Авторизует запросы")
+Rel(query, semantic, "Использует определения метрик")
+Rel(semantic, cache, "Читает агрегаты")
+
+Rel(ingest, dlq, "Отправляет ошибочные события")
+Rel(ingest, transform, "Передает события")
+Rel(transform, store, "Записывает результат")
+
+Rel_L(adapter_dwh, mapper, "Передает легаси-данные")
+Rel(adapter_esb, mapper, "Передает легаси-данные")
+
+Rel(user, auth, "Использует")
+Rel(partner, new_domains, "Поставляет данные")
+
+Rel(cache, store, "Запрашивает агрегаты")
+Rel(ingest, bus, "Подписывается на события")
+
+Rel(clinic, bus, "Публикует события пациентского потока")
+Rel(fintech, bus, "Публикует финансовые события")
+Rel(ai, bus, "Публикует результаты моделей")
+Rel(hq, bus, "Публикует данные, отчетность")
+Rel(new_domains, bus, "Публикует новые источники событий")
+
+Rel(bus, adapter_esb, "Передает события для легаси-интеграций")
+Rel(adapter_esb, esb, "Обертывает")
+Rel(adapter_dwh, dwh, "Читает / пишет через адаптер")
+Rel(pb, dwh, "Получает данные")
+Rel(clinic, dwh, "EHR / медкарты")
+
+Rel(bus, catalog, "Регистрирует схемы событий")
+Rel(catalog, store, "Валидирует контракты")
+@enduml

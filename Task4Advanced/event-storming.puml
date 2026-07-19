@@ -1,0 +1,63 @@
+@startuml
+title Event Storming
+
+rectangle "Зарегистрировать пациента" as C1 <<command>> #lightgreen
+rectangle "Patient" as A1 <<aggregate>> #orange
+rectangle "Зарегистрирован новый пациент" as E1 <<event>> #lightyellow
+
+C1 --> A1
+A1 --> E1
+
+rectangle "Назначить исследование" as C2 <<command>> #lightgreen
+rectangle "TreatmentCase" as A2 <<aggregate>> #orange
+rectangle "Назначено диагностическое исследование" as E2 <<event>> #lightyellow
+
+C2 --> A2
+A2 --> E2
+
+rectangle "Запустить ИИ-анализ" as C3 <<command>> #lightgreen
+rectangle "DiagnosticSession" as A3 <<aggregate>> #orange
+rectangle "Пройдено исследование ИИ" as E3 <<event>> #lightyellow
+
+E2 -[#purple]-> C3 : Policy: при назначении\nисследования запускается ИИ-анализ
+C3 --> A3
+A3 --> E3
+
+rectangle "Выставить счет за лечение" as C4 <<command>> #lightgreen
+rectangle "Invoice" as A4 <<aggregate>> #orange
+rectangle "Выставлен счет за лечение" as E4 <<event>> #lightyellow
+
+E3 -[#purple]-> C4 : Policy: после завершения\nлечения формируется счет
+C4 --> A4
+A4 --> E4
+
+rectangle "Оформить кредитный договор" as C5 <<command>> #lightgreen
+rectangle "LoanAgreement" as A5 <<aggregate>> #orange
+rectangle "Создан кредитный договор" as E5 <<event>> #lightyellow
+
+E4 -[#purple]-> C5 : Policy: пациент выбирает\nоплату в кредит
+C5 --> A5
+A5 --> E5
+
+rectangle "Провести платеж" as C6 <<command>> #lightgreen
+rectangle "Payment" as A6 <<aggregate>> #orange
+rectangle "Платеж проведен" as E6 <<event>> #lightyellow
+
+E5 -[#purple]-> C6
+C6 --> A6
+A6 --> E6
+
+rectangle "Streaming Data Mart\n(Patient Care)" as S1 <<subscriber>> #lightblue
+rectangle "Streaming Data Mart\n(AI Diagnostics)" as S2 <<subscriber>> #lightblue
+rectangle "Streaming Data Mart\n(Fintech)" as S3 <<subscriber>> #lightblue
+rectangle "Self-Service Portal" as S4 <<subscriber>> #lightblue
+
+E1 -[#lightgreen]-> S1
+E3 -[#lightgreen]-> S2
+E5 -[#lightgreen]-> S3
+E6 -[#lightgreen]-> S3
+
+S1 --> S4
+S2 --> S4
+S3 --> S4
+@enduml
