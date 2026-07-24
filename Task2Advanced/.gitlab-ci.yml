@@ -1,0 +1,124 @@
+stages:
+  - validate
+  - plan
+  - apply
+
+variables:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+  TF_ROOT_DEV: "envs/dev"
+  TF_ROOT_STAGE: "envs/stage"
+  TF_ROOT_PROD: "envs/prod"
+  TF_VERSION: "1.15.8"
+
+image:
+  name: hashicorp/terraform:${TF_VERSION}
+  entrypoint: [ "" ]
+
+.tf_backend_creds: &tf_backend_creds
+  AWS_ACCESS_KEY_ID: "${TF_BACKEND_ACCESS_KEY}"
+  AWS_SECRET_ACCESS_KEY: "${TF_BACKEND_SECRET_KEY}"
+
+validate:
+  stage: validate
+  variables:
+    <<: *tf_backend_creds
+  script:
+    - for env_dir in "$TF_ROOT_DEV" "$TF_ROOT_STAGE" "$TF_ROOT_PROD"; do
+      echo "Validating $env_dir";
+      (cd "$env_dir" && terraform init -backend=false && terraform validate);
+      done
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+.plan_template: &plan_template
+  stage: plan
+  variables:
+    <<: *tf_backend_creds
+  script:
+    - cd "$TF_ROOT"
+    - terraform init
+    - terraform plan -var-file="${ENV_NAME}.tfvars" -out=tfplan.binary
+  artifacts:
+    name: "tfplan-${ENV_NAME}-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - "${TF_ROOT}/tfplan.binary"
+    expire_in: 3 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+plan:dev:
+  <<: *plan_template
+  variables:
+    <<: *tf_backend_creds
+    TF_ROOT: $TF_ROOT_DEV
+    ENV_NAME: "dev"
+    TF_VAR_ssh_public_key: "${DEV_SSH_PUBLIC_KEY}"
+    TF_VAR_subnet_id: "${DEV_SUBNET_ID}"
+
+plan:stage:
+  <<: *plan_template
+  variables:
+    <<: *tf_backend_creds
+    TF_ROOT: $TF_ROOT_STAGE
+    ENV_NAME: "stage"
+    TF_VAR_ssh_public_key: "${STAGE_SSH_PUBLIC_KEY}"
+    TF_VAR_subnet_id: "${STAGE_SUBNET_ID}"
+
+plan:prod:
+  <<: *plan_template
+  variables:
+    <<: *tf_backend_creds
+    TF_ROOT: $TF_ROOT_PROD
+    ENV_NAME: "prod"
+    TF_VAR_ssh_public_key: "${PROD_SSH_PUBLIC_KEY}"
+    TF_VAR_subnet_id: "${PROD_SUBNET_ID}"
+
+.apply_template: &apply_template
+  stage: apply
+  variables:
+    <<: *tf_backend_creds
+  script:
+    - cd "$TF_ROOT"
+    - terraform init
+    - terraform apply -auto-approve -var-file="${ENV_NAME}.tfvars"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+
+apply:dev:
+  <<: *apply_template
+  environment:
+    name: dev
+  variables:
+    <<: *tf_backend_creds
+    TF_ROOT: $TF_ROOT_DEV
+    ENV_NAME: "dev"
+    TF_VAR_ssh_public_key: "${DEV_SSH_PUBLIC_KEY}"
+    TF_VAR_subnet_id: "${DEV_SUBNET_ID}"
+  needs: [ "plan:dev" ]
+
+apply:stage:
+  <<: *apply_template
+  environment:
+    name: stage
+  variables:
+    <<: *tf_backend_creds
+    TF_ROOT: $TF_ROOT_STAGE
+    ENV_NAME: "stage"
+    TF_VAR_ssh_public_key: "${STAGE_SSH_PUBLIC_KEY}"
+    TF_VAR_subnet_id: "${STAGE_SUBNET_ID}"
+  needs: [ "plan:stage" ]
+
+apply:prod:
+  <<: *apply_template
+  environment:
+    name: prod
+  variables:
+    <<: *tf_backend_creds
+    TF_ROOT: $TF_ROOT_PROD
+    ENV_NAME: "prod"
+    TF_VAR_ssh_public_key: "${PROD_SSH_PUBLIC_KEY}"
+    TF_VAR_subnet_id: "${PROD_SUBNET_ID}"
+  needs: [ "plan:prod" ]
