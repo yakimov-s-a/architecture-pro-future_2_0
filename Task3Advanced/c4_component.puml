@@ -14,17 +14,19 @@ System_Boundary(platform, "Data и Event Platform (облако)") {
         Component(cache, "Слой кэширования", "Cache Layer", "Кэш агрегатов")
     }
     Container(catalog, "Каталог схем и данных", "Schema Registry и Data Catalog", "Контракты данных, версионирование")
-    Container(bus, "Событийная шина", "Kafka / Event Backbone", "Асинхронный обмен событиями между доменами")
+    Container(bus, "Событийная шина", "Kafka / Event Backbone", "Асинхронный обмен событиями между доменами\n(реализует retry / DLQ - паттерны надежности, которые были реализованы в Camel. Связи с отправкой сообщений во все домены опущены для улучшения понятности диаграммы)")
+    Container(flc, "Шлюз валидации", "FLC + validation", "Функции ФЛК\n(ранее реализованные в ESB-маршрутах)")
+    Container(saga, "Оркестратор Saga", "Управляет исполнением комплексной бизнес-логики между доменами (было реализовано в ESB)")
     Container_Boundary(marts, "Потоковые витрины") {
         Component(ingest, "Stream Ingestion", "Kafka Connect / Consumers", "Прием событий из шины")
-        Component(transform, "Потоковые трансформации", "Flink jobs", "Трансформация по доменам")
-        Component(dlq, "Dead Letter Queue", "DLQ", "Обработка ошибочных событий")
+        Component(transform, "Потоковые трансформации", "Flink jobs", "Трансформация по доменам\n(трансформации, ранее реализованные в ESB-маршрутах)")
+        Component(dlq, "Dead Letter Queue", "DLQ", "Обработка ошибочных событий\n(участвует в обеспечении надежности, ранее реализованной в Camel")
         ComponentDb(store, "Доменные хранилища", "Cloud DWH", "Аналитические данные по доменам")
     }
     Container_Boundary(acl, "Антикоррупционный слой (ACL)") {
         Component(adapter_dwh, "Адаптер DWH", "DWH Adapter", "Чтение без доп. бизнес-логики")
         Component(adapter_esb, "Адаптер Camel ESB", "ESB Adapter", "Обертка легаси-интеграций")
-        Component(mapper, "Маппер моделей данных", "Schema Mapper", "Конвертация из легаси схемы в доменную схему")
+        Component(mapper, "Маппер моделей данных", "Schema Mapper", "Конвертация из легаси схемы в доменную схему\n(ранее трансформации были реализованы в Camel)")
     }
 }
 
@@ -38,7 +40,7 @@ System_Boundary(domains, "Домены (владеют своими данным
 
 System_Boundary(legacy, "Легаси") {
     ContainerDb(dwh, "DWH", "MS SQL Server 2008", "Только мед. данные и переходные интеграции")
-    Container(esb, "ESB", "Apache Camel", "Точечные синхронные интеграции")
+    Container(esb, "ESB", "Apache Camel", "Точечные синхронные интеграции\n(маршрутизация / ФЛК / трансформации вынесены)")
     Container(pb, "Клиентский интерфейс", "PowerBuilder")
 }
 
@@ -59,18 +61,23 @@ Rel(partner, new_domains, "Поставляет данные")
 Rel(cache, store, "Запрашивает агрегаты")
 Rel(ingest, bus, "Подписывается на события")
 
-Rel(clinic, bus, "Публикует события пациентского потока")
-Rel(fintech, bus, "Публикует финансовые события")
-Rel(ai, bus, "Публикует результаты моделей")
-Rel(hq, bus, "Публикует данные, отчетность")
-Rel(new_domains, bus, "Публикует новые источники событий")
+Rel(clinic, flc, "Публикует события пациентского потока")
+Rel(fintech, flc, "Публикует финансовые события")
+Rel(ai, flc, "Публикует результаты моделей")
+Rel(hq, flc, "Публикует данные, отчетность")
+Rel(new_domains, flc, "Публикует новые источники событий")
 
-Rel(bus, adapter_esb, "Передает события для легаси-интеграций")
+Rel_U(flc, bus, "Публикует валидированные события")
+Rel(flc, catalog, "Проверяет структуру событий по схеме")
+
+Rel_U(bus, saga, "Подписывается на события, требующие оркестрации")
+Rel_U(saga, bus, "Публикует команды в другие домены")
+
+Rel(bus, adapter_esb, "Передает события для легаси-интеграций", "Маршрутизация через subscription config, вместо Camel route")
 Rel(adapter_esb, esb, "Обертывает")
 Rel(adapter_dwh, dwh, "Читает / пишет через адаптер")
 Rel(pb, dwh, "Получает данные")
 Rel(clinic, dwh, "EHR / медкарты")
 
-Rel(bus, catalog, "Регистрирует схемы событий")
 Rel(catalog, store, "Валидирует контракты")
 @enduml
